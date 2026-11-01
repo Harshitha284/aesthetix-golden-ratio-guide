@@ -3,15 +3,17 @@
 > **Full-Stack Biometric Facial Proportion & Optical Styling Platform**
 
 [![Framework: Flutter](https://img.shields.io/badge/Frontend-Flutter%20Web-02569B?logo=flutter)](https://flutter.dev)
+[![Engine: MediaPipe Face Mesh](https://img.shields.io/badge/Computer%20Vision-MediaPipe%20Face%20Mesh-4285F4?logo=google)](https://developers.google.com/mediapipe)
 [![Backend: Hono](https://img.shields.io/badge/Backend-Hono%20on%20Cloudflare%20Workers-E36002?logo=cloudflare)](https://hono.dev)
 [![Database: Cloudflare D1](https://img.shields.io/badge/Database-Cloudflare%20D1%20SQLite-F38020?logo=cloudflare)](https://developers.cloudflare.com/d1/)
+[![Hosting: Cloudflare Pages](https://img.shields.io/badge/Hosting-Cloudflare%20Pages-F38020?logo=cloudflare)](https://pages.cloudflare.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
 ## 1. Overview
 
-**Aesthetix: Golden Ratio Guide** is an AI-inspired, scientifically grounded facial analysis and optical grooming platform. Built on the classical principles of the Golden Ratio ($\Phi \approx 1.618$) and bilateral symmetry, Aesthetix evaluates facial vectors, gonial mandibular angles, and canthal tilt to recommend harmonizing haircuts, eyewear, and healthy daily wellness habits.
+**Aesthetix: Golden Ratio Guide** is an AI-inspired, scientifically grounded facial analysis and optical grooming platform. Built on the classical principles of the Golden Ratio ($\Phi \approx 1.618$) and bilateral symmetry, Aesthetix dynamically tracks 468 facial mesh landmarks in real time to evaluate facial vectors, gonial mandibular angles, canthal tilt, and symmetry axes. It recommends harmonizing haircuts, eyewear, and healthy daily wellness habits tailored to your unique anatomical proportions.
 
 ---
 
@@ -19,63 +21,86 @@
 
 ```mermaid
 graph TD
-    subgraph Client["Flutter Web Client (Port 50000+)"]
-        A[WebRTC Camera & Image Upload] --> B[Biometric HUD CustomPainter]
-        B --> C[Interactive Before/After Slider]
-        C --> D[Optical Styling & Habit Tracker]
-        D -->|HTTP POST /api/scans| E[HTTP Client]
+    subgraph Client["Flutter Web Client (Hosted on Cloudflare Pages)"]
+        A1[WebRTC Camera Stream] --> B[Dual Input Pipeline]
+        A2[Gallery / File Photo Upload] --> B
+        B --> C[Dart-to-JS Bridge: Uint8List to Blob]
+        C --> D[MediaPipe Face Mesh Engine]
+        D -->|468 Normalized Landmarks & Biometrics| E[Biometric HUD CustomPainter]
+        E --> F[BoxFit.contain Viewport Mapping]
+        F --> G[Interactive Before/After Slider]
+        G --> H[Optical Styling & Habit Tracker]
+        H -->|HTTP POST /api/scans JSON| I[HTTP Client]
     end
 
-    subgraph Backend["Cloudflare Workers Edge (Port 8787)"]
-        E -->|CORS Enabled| F[Hono API Router]
-        F --> G[Biometrics Evaluator & CORS Middleware]
-        G --> H[Cloudflare D1 Binding: env.DB]
+    subgraph Backend["Cloudflare Workers Edge (Hono)"]
+        I -->|CORS Enabled| J[Hono API Router]
+        J --> K[Biometrics Evaluator & Payload Validator]
+        K --> L[Cloudflare D1 Binding: env.DB]
     end
 
     subgraph Database["Cloudflare D1 SQL"]
-        H --> I[(users Table)]
-        H --> J[(scans Table)]
-        H --> K[(habits Table)]
-        H --> L[(leaderboards Table)]
+        L --> M[(users Table)]
+        L --> N[(scans Table)]
+        L --> O[(habits Table)]
+        L --> P[(leaderboards Table)]
     end
 ```
 
 ### Technical Stack Details
 
 * **Client**: **Flutter (Dart) Web** featuring:
-  * Hardware-accelerated WebRTC live camera preview (`html.VideoElement` via `dart:html` / `dart:ui_web`).
-  * Custom mathematical landmark vector overlays rendered via `CustomPainter` (`Gonial Angle`, `Canthal Tilt`, `Symmetry Midline`).
-  * Interactive Before/After golden potential slider (`_beforeAfterSliderPos`).
-  * Cyberpunk dark-mode aesthetic with laser sweep animations and glassmorphic HUD controls.
-* **Backend**: **Hono Framework** running on the **Cloudflare Workers** serverless edge runtime with:
-  * Global CORS middleware (`app.use('/*', cors())`) enabling unrestricted communication with the Flutter web client.
-  * Robust REST endpoints for user initialization, real-time look evaluations, and scan history.
+  * Dual-capture ingestion: Live HTML5 WebRTC camera (`html.VideoElement`) and gallery photo picker (`ImagePicker` up to 2560px).
+  * Direct byte-to-canvas bridge passing raw `Uint8List` image buffers to JavaScript.
+  * Real-time 468-point facial mesh tracking powered by client-side Google MediaPipe Face Mesh.
+  * Aspect-ratio-aware `BiometricLandmarkPainter` mapping normalized $(0.0 \dots 1.0)$ coordinates across letterboxed / pillarboxed viewports with zero coordinate drift.
+  * Interactive before/after golden potential slider (`_beforeAfterSliderPos`).
+  * Cyberpunk dark-mode HUD aesthetic with laser sweep animations and glassmorphic controls.
+* **Backend**: **Hono Framework** running on the **Cloudflare Workers** serverless edge runtime:
+  * Global CORS middleware enabling communication with the Flutter web client.
+  * Lightweight numerical metric persistence (gonial angles, canthal tilts, symmetry scores) without transferring heavy binary images to the worker.
 * **Database**: **Cloudflare D1** serverless relational SQL database:
-  * Low-latency regional SQLite edge storage.
-  * Structured schema tracking users, biometric scan metrics, habit adherence, and community leaderboards.
+  * Low-latency regional SQLite edge storage tracking users, biometric scan records, habit adherence, and leaderboards.
 
 ---
 
-## 3. Key Features
+## 3. Key Features & Engineering Innovations
 
-* **Live Hardware Webcam & File Upload Pipelines**
-  * Direct access to laptop/desktop webcams using HTML5 `getUserMedia` and HTML Canvas frame grabbing.
-  * Instant local portrait picker with high-resolution scaling and fallback preset profiles.
-* **Biometric Geometric Vector Engine**
-  * **Gonial Mandibular Angle**: Precise angular lines mapping ramus inclination to the gonion badge (e.g., $121.4^\circ$).
-  * **Canthal Tilt Axis**: Bilateral vectors measuring palpebral fissure slant (e.g., $+4.6^\circ$ Positive Tilt).
-  * **Bilateral Facial Symmetry**: Midline deviation scoring assessing hemifacial balance ($94.8\%$).
-  * **Interactive Layer Filters**: Toggle between `"All"`, `"Jawline"`, `"Canthal Tilt"`, `"Symmetry"`, and `"Clean (Off)"`.
-* **Optical Styling & Grooming Recommendation Engine**
-  * Automatically classifies facial phenotypes into archetypes (*Balanced Oval*, *Square Diamond*, *Chiseled Oblong*, *Inverted Triangle*).
-  * Generates actionable optical pairing guides:
-    * **Haircut Architecture**: Low taper fades, French crops, or textured volume matched to forehead-to-jaw proportions.
-    * **Eyewear Geometry**: Angular vs. rounded panto frames to balance cheekbone width.
-    * **Beard Contouring**: Jawline shadowing to optimize the lower-third profile.
-* **Daily Proportional Wellness Tracker**
-  * Non-clinical lifestyle habits: Micro-hydration (2.5L), SPF 50+ UV shielding, neutral cervical posture alignment, and restorative sleep hygiene.
-* **Store-Compliant Safety Disclaimer**
-  * Clear educational and cosmetic labeling ensuring compliance with mobile and web application guidelines.
+### 1. Dual Capture Pipeline (Gallery Upload + WebRTC Stream)
+* Supports both real-time desktop/laptop webcam streams via HTML5 `getUserMedia` and high-resolution photo uploads from device galleries (iPhone/Android/Desktop).
+* Preserves high resolution (up to 2560px @ 98% quality) during image ingestion so fine facial features are clearly identifiable even in upper-body and distant portrait poses.
+
+### 2. Client-Side FaceMesh & Safari WebAssembly Stabilization
+* **Explicit WebAssembly CDN Resolver**: Configured explicit `locateFile` paths targeting `@mediapipe/face_mesh` CDN assets (`.wasm`, `.data`, and `.binarypb`), eliminating WebKit cross-origin redirect exceptions and initialization crashes on iOS Safari.
+* **Non-Blocking Initialization**: Removed synchronous initialization traps, allowing lazy wasm runtime loading on the first frame pipeline execution.
+* **CORS Safe Data Handling**: Eliminates `crossOrigin = 'anonymous'` on raw data URLs and in-memory blobs, preventing WebKit tainted canvas security exceptions.
+
+### 3. High-Res Memory Guard & Async Byte Decoding
+* **Native Blob & Object URL Bridge**: Converts raw Dart `Uint8List` byte buffers directly into image `Blob` instances and temporary Object URLs, bypassing base64 string transfer bottlenecks.
+* **Asynchronous `img.decode()`**: Leverages browser-native off-thread image decoding before drawing to canvas.
+* **1024px Downscaling Guard**: Automatically scales down massive 12MP+ mobile photos to a maximum dimension of 1024px onto an offscreen HTML Canvas before executing MediaPipe inference. This prevents iOS Safari WebAssembly memory allocation crashes and resolves false *"No face detected"* errors on passport and high-resolution photos.
+* **Adaptive Confidence**: Calibrated `minDetectionConfidence: 0.3` and `minTrackingConfidence: 0.3` to reliably capture angled, distant, or partially turned faces.
+
+### 4. Zero-Drift Viewport with `BoxFit.contain`
+* **Viewport Containment**: Switched image rendering from `BoxFit.cover` to `BoxFit.contain`, preventing vertical and 9:16 mobile photos from having the head or chin cropped out.
+* **Mathematical Aspect-Ratio Mapping**: `BiometricLandmarkPainter` computes the exact destination bounding box (`imageRect`) based on the true aspect ratio of the image:
+  $$\text{imageRect} = \text{Rect.fromLTWH}(\text{offsetX}, \text{offsetY}, \text{renderWidth}, \text{renderHeight})$$
+  Normalized coordinates $(x, y) \in [0, 1]$ map to screen coordinates via:
+  $$X = \text{imageRect.left} + (x \times \text{imageRect.width}), \quad Y = \text{imageRect.top} + (y \times \text{imageRect.height})$$
+  Ensures the landmark HUD aligns pixel-perfectly with real facial features regardless of viewport aspect ratio, letterboxing, or pillarboxing.
+
+### 5. Dynamic Biometric HUD Calculations
+* **Gonial Mandibular Angle**: Computes the exact 3D angle between the mandibular condyle (landmark 234/454), gonion angle (landmark 58/288), and chin apex (landmark 152).
+* **Canthal Tilt Vector**: Measures the bilateral angle formed between the inner canthus (landmarks 133/362) and outer canthus (landmarks 33/263).
+* **Bilateral Facial Symmetry**: Evaluates lateral distance ratios from facial landmarks to the vertical midline (forehead landmark 10 to menton landmark 175).
+* **Dynamic Rating Derivations**: Rating breakdowns (`jawline`, `canthalTilt`, `symmetry`, `overallScore`) reflect genuine detected angles rather than randomized seed values.
+* **Head Target Brackets**: Computes 468-point bounding boxes and renders cybernetic corner brackets framing the head location.
+* **Interactive Layer Filters**: Toggle between `"All"`, `"Jawline"`, `"Canthal Tilt"`, `"Symmetry"`, and `"Clean (Off)"`.
+
+### 6. Optical Grooming & Lifestyle Platform
+* **Phenotype Classification**: Maps measurements to archetypes (*Balanced Oval*, *Square Diamond*, *Chiseled Oblong*, *Inverted Triangle*).
+* **Styling Guidance**: Tailored haircut architectures (low tapers, French crops), eyewear frame geometry (panto, wayfarer, geometric), and beard contours.
+* **Daily Proportional Wellness Tracker**: Micro-hydration (2.5L), SPF 50+ UV shielding, neutral cervical posture alignment, and sleep hygiene.
 
 ---
 
@@ -83,14 +108,12 @@ graph TD
 
 ### Prerequisites
 * [Node.js](https://nodejs.org/) (v18+ recommended)
-* [Flutter SDK](https://docs.flutter.dev/get-started/install) (Stable channel, Web-enabled)
-* Google Chrome browser
+* [Flutter SDK](https://docs.flutter.dev/get-started/install) (v3.29+ recommended)
+* Google Chrome or Safari browser
 
 ---
 
 ### Step 1: Start the Local Hono Backend (Cloudflare Workers + D1)
-
-Open a terminal in the project directory:
 
 ```bash
 # Navigate to the backend directory
@@ -112,8 +135,6 @@ npm run dev
 
 ### Step 2: Start the Flutter Frontend
 
-Open a second terminal in the project directory:
-
 ```bash
 # Navigate to the frontend directory
 cd frontend
@@ -121,8 +142,22 @@ cd frontend
 # Fetch Dart dependencies
 flutter pub get
 
-# Launch the app in Google Chrome
+# Launch the app in your browser
 flutter run -d chrome
+```
+
+---
+
+### Step 3: Production Build & Deployment
+
+To build the release bundle and deploy to Cloudflare Pages:
+
+```bash
+# From the frontend directory
+flutter build web --release
+
+# Deploy to Cloudflare Pages
+npx wrangler pages deploy build/web --project-name aesthetix --branch main --commit-dirty=true
 ```
 
 ---
